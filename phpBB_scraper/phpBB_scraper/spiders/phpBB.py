@@ -6,9 +6,9 @@ from scrapy.http import Request
 
 # TODO: Please provide values for the following variables
 # Domains only, no urls
-ALLOWED_DOMAINS = ['']
+ALLOWED_DOMAINS = ['incognito.forumperso.com']
 # Starting urls
-START_URLS = ['']
+START_URLS = ['https://incognito.forumperso.com']
 # Is login required? True or False.
 FORM_LOGIN = False
 # Login username
@@ -70,45 +70,40 @@ class PhpbbSpider(scrapy.Spider):
         # IF NEXT PAGE EXISTS, FOLLOW
         next_link = response.xpath('//li[@class="next"]//a[@rel="next"]/@href').extract_first()
         if next_link:
-            yield scrapy.Request(response.urljoin(next_link), callback=self.parse_topics)   
-    
-    def clean_quote(self, string):
-        # CLEAN HTML TAGS FROM POST TEXT, MARK QUOTES
-        soup = BeautifulSoup(string, 'lxml')
-        block_quotes = soup.find_all('blockquote')
-        for i, quote in enumerate(block_quotes):
-            block_quotes[i] = '<quote-%s>=%s' % (str(i + 1), quote.get_text())
-        return ''.join(block_quotes)
-    
-    def clean_text(self, string):
-        # CLEAN HTML TAGS FROM POST TEXT, MARK REPLIES TO QUOTES
-        tags = ['blockquote']
-        soup = BeautifulSoup(string, 'lxml')
-        for tag in tags:
-            for i, item in enumerate(soup.find_all(tag)):
-                item.replaceWith('<reply-%s>=' % str(i + 1))
-        return re.sub(r' +', r' ', soup.get_text())
+            yield scrapy.Request(response.urljoin(next_link), callback=self.parse_topics)
       
     def parse_posts(self, response):
         # COLLECT FORUM POST DATA
-        usernames = response.xpath('//p[@class="author"]//a[@class="username"]//text()').extract()
-        post_counts = response.xpath('//dd[@class="profile-posts"]//a/text()').extract()
-        post_times = response.xpath('//div[@class="postbody"]//time/@datetime').extract()
-        post_texts = response.xpath('//div[@class="postbody"]//div[@class="content"]').extract()
-        post_quotes = [self.clean_quote(s) for s in post_texts]
-        post_texts = [self.clean_text(s) for s in post_texts]
-
-        # YIELD POST DATA
-        for i in range(len(usernames)):
-            yield {
-                'Username': usernames[i],
-                'PostCount': post_counts[i],
-                'PostTime': post_times[i],
-                'PostText': post_texts[i],
-                'QuoteText': post_quotes[i]
-            }
+        page_title = response.css('h1 a::text').get().strip()
+        pathname = ' '.join(p.strip() for p in response.css('.pathname-box *::text').getall())
+        posts = []
+        for post in response.css('.post'):
+            postprofile = post.css('.postprofile')
+            username = postprofile.css('dt strong::text').get()
+            if not username:  # "Sujets similaires"
+                continue
+            if username == 'Contenu sponsorisé':
+                continue
+            user_role = postprofile.css('dd:nth-child(2)::text').get().strip()
+            post_count = postprofile.css('dd:nth-child(4)::text').get().strip()
+            post_time = post.css('.author::text').get().split(' le ')[1].strip()
+            post_text = post.css('.content').get().strip()
+            posts.append({
+                'Username': username,
+                'UserRole': user_role,
+                'PostCount': post_count,
+                'PostTime': post_time,
+                'PostText': post_text,
+            })
+        yield {
+            'title': page_title,
+            'pathname': pathname,
+            'posts': posts,
+        }
         
         # CLICK THROUGH NEXT PAGE
-        next_link = response.xpath('//li[@class="next"]//a[@rel="next"]/@href').extract_first()
-        if next_link:
-            yield scrapy.Request(response.urljoin(next_link), callback=self.parse_posts)
+        # Lucas: Non nécessaire pour incognito.forumperso.com
+        # donc désactivé comme ces sélecteurs sont très propablement incorrects avec la version de phpBB du forum
+        # next_link = response.xpath('//li[@class="next"]//a[@rel="next"]/@href').extract_first()
+        # if next_link:
+            # yield scrapy.Request(response.urljoin(next_link), callback=self.parse_posts)

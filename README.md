@@ -34,7 +34,6 @@ If you need additional data scraped, you will have to create additional spiders 
 ## Running the Scraper:
 ```bash
 cd phpBB_scraper/
-scrapy crawl phpBB
-# scrapy crawl phpBB -o posts.csv
+scrapy crawl phpBB -o incognito.json
 ```
 NOTE: Please adjust `settings.py` to throttle your requests.
